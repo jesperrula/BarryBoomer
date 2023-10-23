@@ -1,0 +1,903 @@
+//----------------------------------------------------------
+// Code for creating the breakpoint file sent to Vice.
+//----------------------------------------------------------
+.var _useBinFolderForBreakpoints = cmdLineVars.get("usebin") == "true"
+.var _createDebugFiles = cmdLineVars.get("afo") == "true"
+.print "File creation " + [_createDebugFiles
+    ? "enabled (creating breakpoint file)"
+    : "disabled (no breakpoint file created)"]
+.var brkFile
+.if(_createDebugFiles) {
+    .if(_useBinFolderForBreakpoints)
+        .eval brkFile = createFile("bin/breakpoints.txt")
+    else
+        .eval brkFile = createFile("breakpoints.txt")
+}
+.macro break() {
+.if(_createDebugFiles) {
+    .eval brkFile.writeln("break " + toHexString(*))
+    }
+}
+
+// --------------------------------------------------------------------------
+
+.var music = LoadSid("music\TrappedAgain.sid")
+
+.const debug = false
+
+.const TopRasterIRQ = 0
+
+.const NumOfStars = 32 //32 // Number of stars in starfield
+.const StarSpeed1 = 5
+.const StarSpeed2 = 4
+.const StarSpeed3 = 3
+.const StarSpeed4 = 1
+.const StarFieldHeight=200-(7*8)
+.const StarFieldWidth=158
+
+.pc = $0801 "Basic Upstart Program"
+					:BasicUpstart($080d)
+
+.pc = $080d "Code Main"
+					jmp Main
+
+#import "macros.asm"
+
+Main:				sei 
+					lda #$35
+					sta $01
+					lda #$0b
+					sta $d011
+					lda #$d8
+					sta $d016
+					lda #$3e
+					sta $dd00
+					lda #$80
+					sta $d018
+					lda #0
+					sta $d020
+					sta $d021
+					sta $d015
+					sta $d01b
+					sta $d017
+					sta $d01d
+					sta $d01c
+					ldx #$10
+ClrVIC:				sta $d000,x
+					dex
+					bpl ClrVIC
+					ldx #0
+ClrColRam:			lda BackgroundColors,x
+					sta $d800,x
+					lda BackgroundColors+$100,x
+					sta $d900,x
+					lda BackgroundColors+$200,x
+					sta $da00,x
+					lda BackgroundColors+$300,x
+					sta $db00,x
+					inx
+					bne ClrColRam
+
+					ldx #0
+zpinit:				sta zp_begin,x
+					inx
+					cpx #zp_end-zp_begin
+					bne zpinit
+
+					ldx #0 							// Set all black background attributes to StarFieldColor
+					ldy #0
+SetStarFieldColor:	lda Screen0,x
+					bne !+
+					lda StarFieldColors,y //#StarFieldColor
+					iny
+					sta Screen0,x
+!:					lda Screen0+$100,x
+					bne !+
+					lda StarFieldColors,y //#StarFieldColor
+					iny
+					sta Screen0+$100,x
+!:					lda Screen0+$200,x
+					bne !+
+					lda StarFieldColors,y //#StarFieldColor
+					iny
+					sta Screen0+$200,x
+!:					lda Screen0+$2f8,x
+					bne !+
+					lda StarFieldColors,y //#StarFieldColor
+					iny
+!:					sta Screen0+$2f8,x
+
+					lda DrummerAttributes,x
+					bne !+
+					lda StarFieldColors,y //#StarFieldColor
+					iny
+!:					sta DrummerAttributes,x
+					inx
+					bne SetStarFieldColor
+
+					ldx #$00
+					ldy #$00
+					lda #music.startSong-1
+					jsr music.init
+
+					jsr StarField.FullSpeed 		// Prerender starfield
+					lda #1
+					sta ScreenSwitch
+					jsr StarField.FullSpeed
+					lda #0
+					sta ScreenSwitch
+
+					jsr SpaceGuy.InitBeams
+
+					StoryboardInit(StoryBoard)		// Init storyboard
+					
+					lda #$7f
+					sta $dc0d
+					sta $dd0d
+					lda $dc0d
+					lda $dd0d
+					lda #$01
+					sta $d019
+					sta $d01a
+					lda #TopRasterIRQ
+					sta $d012
+					lda #<irqTop
+					sta $fffe
+					lda #>irqTop
+					sta $ffff
+					lda #<NMI
+					sta $fffa 
+					lda #>NMI
+					sta $fffb
+					cli
+!:					lda FLAG_vsync
+					beq !-
+					lda #0
+					sta FLAG_vsync
+					jsr music.play
+					jsr Scroller.Scroll
+					jsr StarField.Execute
+					jsr FlashingHead.Execute
+					jsr DEMOSYS_StoryboardExecute	// Execute storyboard code
+					jsr SpaceShip.HideExec
+					jsr Drummer.Execute
+					jsr SpaceGuy.BeamAnim
+					jsr SpaceGuy.Execute
+					jsr SpaceShip.DrawPlatform
+					jsr Planet.Execute
+					jsr Moon.Execute
+					jmp !-
+FLAG_vsync:			.byte 0
+
+// -----------------------------------------------------------------
+
+irqTop:				pha
+					txa
+					pha
+					tya
+					pha
+					inc $d019
+scrypos:			lda #$3b
+					sta $d011
+scrxpos:			lda #$d8
+					sta $d016
+ScreenColor:		lda #0
+					sta $d020
+					sta $d021
+					jsr SwitchBank
+					lda #0
+					sta $d017
+					sta $d01d
+
+					lda Scroller.FLAG_EnableScrollerIRQ
+					beq !+
+					jmp Scroller.IRQ
+!:					
+					lda SmallShip.FLAG_FlySmallShip
+					beq !+
+					jsr SmallShip.Execute
+!:
+					lda SmallShip.FLAG_LeaveSmallShip
+					beq !+
+					jsr SmallShip.Execute
+!:
+					lda GubbShip.FLAG_EnableGubbShipIRQ
+					beq !+
+					jmp GubbShip.IRQ
+!:
+
+					lda SpaceShip.FLAG_EnableSpaceShipIRQ
+					bne !+
+					jmp NoSpaceShip
+!:					jmp SpaceShip.SpaceShipIRQ
+ReturnSpaceShipIRQ:
+
+					lda FLAG_EnableBeam
+					bne !+
+					jmp SkipEnableBeam
+!: 
+beamcols:			lda #1
+					sta $d029
+					sta $d02a
+					sta $d02b
+					lda #0
+					sta $d010
+					lda #spr_Beam/64
+					sta Screen0+$3fa
+					sta Screen0+$3fb
+					sta Screen0+$3fc
+					lda #$6e+42 // Beam
+					sta $d005
+					clc
+					adc #42
+					sta $d007
+					adc #42
+					sta $d009
+					lda #$be
+					sta $d004
+					sta $d006
+					sta $d008
+					lda #%10111100
+					sta $d017
+					//lda #%01011111
+					//sta $d01c
+
+
+SpaceGuyYpos:		lda #$00 	// SpaceGuy
+					sta $d001
+					clc
+					adc #21
+					sta $d003
+					lda #$bd
+					sta $d000
+					sta $d002
+					lda #6
+					sta $d025
+					lda #1
+					sta $d026
+					lda #15
+					sta $d027
+					lda #8
+					sta $d028
+
+					lda #spr_SpaceGuy/64
+					sta Screen0+$3f8
+					lda #spr_SpaceGuy/64+1
+					sta Screen0+$3f9
+					jmp BeamContinueIRQ
+SkipEnableBeam:
+
+NoSpaceShip:		
+					lda FlashingHead.FLAG_EnableFHead
+					beq !+
+					jmp FlashingHead.IRQ
+!:					
+
+rasterMissile:		lda #$80
+					sta $d012
+					lda #<irqMiddle
+					sta $fffe
+					lda #>irqMiddle
+					sta $ffff
+					jmp PopRegs
+
+irqMiddle:			pha
+					txa
+					pha
+					tya
+					pha
+					inc $d019
+
+					lda SmallShip.FLAG_LeaveSmallShip
+					beq !+
+					lda #0
+					sta $d008
+					sta $d00a
+!:
+					lda Moon.FLAG_EnableMoon
+					beq NoMoon
+
+					lda Moon1Y+1
+					beq SkipMoonIRQ
+					sec 
+					sbc #3
+					sta $d012
+					lda #<irqMoon
+					sta $fffe
+					lda #>irqMoon
+					sta $ffff
+					jmp PopRegs
+
+irqMoon:			pha
+					txa
+					pha
+					tya
+					pha
+					inc $d019
+
+ReturnFromScroller:
+SkipMoonIRQ:
+					lda #$ff
+					sta $d015
+					lda $d01c
+					ora #%11000000
+					sta $d01c
+					lda $d017
+					and #%00111111
+					sta $d017
+					lda $d01d
+					and #%00111111
+					sta $d01d
+					lda #15
+					sta $d025
+MoonCol1:			lda #6
+					sta $d026
+MoonCol2:			lda #12
+					sta $d02d
+					lda #0
+					sta $d02e
+Moon1X:				lda #0
+					sta $d00c
+Moon1Y:				lda #0
+					sta $d00d
+Moon2X:				lda #0
+					sta $d00e
+Moon2Y:				lda #0
+					sta $d00f
+					lda $d010
+					and #%00111111
+Moonmsb:			ora #0
+					sta $d010
+Moon1Ptr:			lda #spr_moon/64
+					sta Screen0+$3fe
+Moon2Ptr:			lda #spr_moon/64+1 //Backside
+					sta Screen0+$3ff
+NoMoon:
+					lda Scroller.FLAG_EnableScrollerIRQ
+					beq !+
+					jmp GotoTopIRQ
+!:
+					jsr Missile.Execute
+					jsr MissileNoRider.Execute
+
+BeamContinueIRQ:
+
+					lda #$c2
+					sta $d012
+					lda #<irqLower
+					sta $fffe
+					lda #>irqLower
+					sta $ffff
+					jmp PopRegs
+
+irqLower:			pha
+					txa
+					pha
+					tya
+					pha
+					inc $d019
+
+					lda SpaceGuy.FLAG_SpaceGuyStationary
+					beq !+
+					lda #0
+					sta $d017
+					sta $d01d
+					sta $d010
+					lda #$ff
+					sta $d015
+					lda SpaceGuyYpos+1 	// SpaceGuy
+					clc
+					adc Planet.GlobalShakeY
+					sta $d001
+					clc
+					adc #21
+					sta $d003
+					lda #$bd
+					clc
+					adc Planet.GlobalShakeX
+					sta $d000
+					sta $d002
+					lda #6
+					sta $d025
+					lda #1
+					sta $d026
+					lda #15
+					sta $d027
+					lda #8
+					sta $d028
+					lda #spr_SpaceGuy/64
+					sta Screen0+$3f8
+					lda #spr_SpaceGuy/64+1
+					sta Screen0+$3f9
+!:
+ReturnGubbShipIRQ:
+
+					lda #1
+					sta FLAG_vsync
+
+					// Platform
+					lda SpaceShip.FLAG_EnablePlatform
+					beq !+
+					jsr SpaceShip.ShowPlatform
+!:
+
+					jsr ReadMusicEvents
+					jsr SpritePusher.Execute
+
+GotoTopIRQ:			lda #0
+					sta $d012
+					lda #<irqTop
+					sta $fffe
+					lda #>irqTop
+					sta $ffff
+PopRegs:			pla
+					tay
+					pla
+					tax
+					pla
+NMI:				rti
+
+// -----------------------------------------------------------------
+
+ReadMusicEvents: 	lda $203f
+					cmp #$20
+					beq noevents
+					cmp #$10
+					beq TriggerEventDrummer
+					cmp #$12
+					beq TriggerFlashScreen
+					cmp #$11
+					beq TriggerFlashingHead
+noevents:			rts
+
+TriggerFlashingHead:
+					lda #1
+					sta EVENT_FlashingHead
+					jmp ResetMusicDriver
+
+TriggerFlashScreen:	lda #1
+					sta EVENT_FlashScreen
+					jmp ResetMusicDriver
+
+TriggerEventDrummer:
+					lda #1
+					sta EVENT_DrummerHit
+ResetMusicDriver:	lda #$20
+					sta $203f
+					rts
+
+EVENT_DrummerHit:		.byte 0
+EVENT_FlashScreen:		.byte 0
+EVENT_FlashingHead:		.byte 0
+
+// -----------------------------------------------------------------
+
+SwitchBank:			lda ScreenSwitch
+					eor #1
+					sta ScreenSwitch
+					inc DemocounterLSB // DemoTimer
+					bne !+
+					inc DemocounterMSB // DemoTimer+1
+!:					rts
+
+// -----------------------------------------------------------------
+
+.pc = * "Code Starfield"
+#import "StarField.asm"
+.pc = * "Code Drummer"
+#import "Drummer.asm"
+.pc = * "Code Moon"
+#import "Moon.asm"
+
+// -----------------------------------------------------------------
+
+.pc = $02 "ZP" virtual
+zp_begin:
+DemoTimer:				.word 0 // Frame counter used by storyboard
+ScreenSwitch:			.byte 0 // 0 = Showing bank 0, 1 = Showing bank 1
+FrameBufferBitmap:		.word 0 // Contains the location of the bitmap we can write to right now
+FrameBufferBitmapBack:	.word 0 // Currently shown bitmap
+FrameBufferScreen:		.word 0 // Contains the location of the screen we can write to right now
+zp_temp:				.byte 0 // Temp storage
+internal_SBZP:			.word 0 // Used by storyboard
+DemocounterLSB:			.byte 0
+DemocounterMSB:			.byte 0
+
+zp_end:
+FLAG_EnableBeam:		.byte 0
+
+// -----------------------------------------------------------------
+
+.pc = $2000 "Music"
+					.fill music.size, music.getData(i)
+
+.pc = $4000 "Framebuffer Bitmap 1"
+Bitmap0:			.import c64 "graphics\Background\background_bitmap.prg"
+.pc = $6000 "Framebuffer Screen 1"
+Screen0:			.import c64 "graphics\Background\background_bitmap_attr.prg"
+.pc = $6400 "Framebuffer Sprites 1"
+spr_moon:			.fill 1*64,0
+spr_moon_back:		.import c64 "graphics\Moon\Moonblack_spr.prg"
+spr_Scroller:
+spr_FlashingHead:
+spr_GubbShip:
+spr_Spaceship:		.import c64 "graphics\Spaceship\Spaceship_spr.prg" // FlashingHead and GubbShip will be copied here
+spr_smallship:		.import c64 "graphics\SmallShip\spaceship_spr1.prg"
+					.import c64 "graphics\SmallShip\spaceship_spr2.prg"
+					.import c64 "graphics\SmallShip\spaceship_spr3.prg"
+spr_Missile:		.import c64 "graphics\Missile\MISSILE_spr.prg"
+spr_MissileRider:	.import c64 "graphics\Missile\Rider_spr.prg"
+spr_MissilePuff:	.import c64 "graphics\Missile\Puff_spr.prg"
+spr_MissileExplode:	.import c64 "graphics\Missile\Explosion_spr.prg"
+spr_platform:		.import c64 "graphics\Platform\Platform_spr.prg"
+spr_platformmask:	.import c64 "graphics\Platform\PlatformBlack_mask.prg"
+spr_Beam:			.fill 64,$aa
+spr_SpaceGuy:		.fill 2*64,0
+
+.pc = $8000 "Background colormap"
+BackgroundColors:	.import c64 "graphics\Background\background_bitmap_colors.prg"
+
+.pc = $d000 "Graphics FlashingHead"
+FlashingHeadSpr:	.import c64 "Graphics\FlashingHead\Head mc_mc.prg"
+					.import c64 "Graphics\FlashingHead\beams_glow.prg"
+					.import c64 "Graphics\FlashingHead\beams_glow2.prg"
+.pc = * "Graphics GubbShip"
+GubbShipSpr:		.import c64 "Graphics\GubbShip\GubbShip_all.prg"
+.pc = $0500 "Font"
+Font:				.import c64 "Graphics\Font\Font_bm.prg"
+Mul8:				.fill 30,i*8
+
+.pc = $8400 "Starfield data"
+tableDiv4:			.fill 160,i/4
+tableDiv8:			.fill 200,i/8
+tableMul40lo:		.fill 25,<StarFieldMask+(i*40)
+tableMul40hi:		.fill 25,>StarFieldMask+(i*40)
+xposlo:				.fill 40,[%10000000,%00100000,%00001000,%00000010]
+tbl_xposlo:			.fill 40,[<i*8,<i*8,<i*8,<i*8]
+tbl_xposhi:			.fill 40,[>i*8,>i*8,>i*8,>i*8]
+tbl_yposlo:			.for(var j=0; j<25; j++) { .fill 8,<i+(j*320) }
+tbl_yposhi:			.for(var j=0; j<25; j++) { .fill 8,>i+(j*320) }
+.pc = * "StarField mask"
+StarFieldMask:		.import c64 "graphics\Background\backgroundmask_mask_Screen.prg" // 1 = do not plot
+DrummerMask:		.import c64 "graphics\Drummer\Drummermask_mask_Screen.prg"
+StarFieldColors:	.fill 16,[11,11,11,11,6,6,6,6,12,12,12,12,9,9,9,9]
+.pc = * "Drummer graphics"
+DrummerBitmap:		.import c64 "graphics\Drummer\drummer_drummer.prg"
+DrummerAttributes:	.import c64 "graphics\Drummer\drummer_drummer_Attr.prg"
+DrummerColors:		.import c64 "graphics\Drummer\drummer_drummer_colors.prg"
+DrummerHead:		.import c64 "graphics\Drummer\DrummerHead_headturn.prg"
+DrummerHeadAttr:	.import c64 "graphics\Drummer\DrummerHead_headturn_Attr.prg"
+DrummerHeadCols:	.import c64 "graphics\Drummer\DrummerHead_headturn_Colors.prg"
+.pc = * "Moon data"
+spr_moon_surface:	.import c64 "graphics\Moon\Moon_spr.prg"
+spr_moon_mask:		.import c64 "graphics\Moon\moonmask_mask.prg"
+str_empty:			.fill 64,0
+
+
+.pc = * "Code Missile"
+#import "Missile.asm"
+.pc = * "Code SpaceShip"
+#import "Spaceship.asm"
+
+.pc = * "Code SpaceGuy"
+#import "SpaceGuy.asm"
+.pc = * "Code SmallShip"
+#import "SmallShip.asm"
+.pc = * "Code SpritePusher"
+#import "SpritePusher.asm"
+
+.pc = * "Code FlashingHead"
+#import "FlashingHead.asm"
+
+.pc = * "Storyboard table"
+//#import "StoryboardFULLSTORY.asm"
+#import "Storyboard.asm"
+
+// ----------------------------------------------------------
+
+.pc = $e000 "Code Scorch"
+#import "Scorch.asm"
+
+//#import "Intro.asm"
+
+// -------------------------------------------------------------------------
+
+.pc = $3680 "Code GubbShip"
+#import "GubbShip.asm"
+
+// -------------------------------------------------------------------------
+
+.pc = $cb00 "Code Scroller"
+
+.namespace Scroller {
+
+.const zp_rasterpos = $20
+.const zp_spritelinecnt = $21
+.const zp_charsrc = $22 // + $23
+.const zp_chardst = $24 // + $25
+
+FLAG_EnableScrollerIRQ:	.byte 0
+
+ScrollColor:		.byte 1
+
+.const ScrollPtr_location = $3800
+
+EnableIRQ:			ldx #0
+					txa
+!:					sta spr_Scroller,x
+					sta spr_Scroller+$200,x
+					sta spr_Scroller+$400,x
+					sta spr_Scroller+$600,x
+					sta spr_Scroller+$800,x
+					sta spr_Scroller+$a00,x
+					sta spr_Scroller+$c00,x
+					sta spr_Scroller+$e00,x
+					sta spr_Scroller+$1000,x
+					inx
+					bne !-
+!:					sta spr_Scroller+$100,x
+					sta spr_Scroller+$300,x
+					sta spr_Scroller+$500,x
+					sta spr_Scroller+$700,x
+					sta spr_Scroller+$900,x
+					sta spr_Scroller+$b00,x
+					sta spr_Scroller+$d00,x
+					sta spr_Scroller+$f00,x
+					sta spr_Scroller+$1100,x
+					inx
+					cpx #63
+					bne !-
+
+					ldx #0
+					lda #spr_Scroller/64
+!:					sta ScrollPtr_location,x
+					clc
+					adc #1
+					inx
+					cpx #9*9
+					bne !-
+
+					lda #1
+					sta FLAG_EnableScrollerIRQ
+					rts
+
+ypos:				.byte 50
+
+// -----------------------------------------------------------------
+
+IRQ:
+					lda ypos
+					sta $d001 
+					sta $d003 
+					sta $d005 
+					sta $d007 
+					sta $d009
+					clc
+					adc #22
+					sta zp_rasterpos
+					lda #0-40
+					sta $d000
+					lda #24-40
+					sta $d002 
+					lda #48-40
+					sta $d004
+					lda #48+24-40
+					sta $d006 
+					lda #48+48-40
+					sta $d008 
+					lda $d010
+					ora #%00111100
+					sta $d010
+					ldx #5
+!:					lda ScrollColor
+					sta $d027,x
+					lda ScrollPtr_location,x
+					sta Screen0+$3f8,x
+					dex
+					bpl !-
+					
+					ldx #0
+RepeatSprites:		stx zp_spritelinecnt
+
+					lda zp_rasterpos
+					sta $d012
+					lda #<SpritesIRQ
+					sta $fffe
+					lda #>SpritesIRQ
+					sta $ffff
+					jmp PopRegs
+SpritesIRQ:			pha
+					txa
+					pha
+					tya
+					pha
+					inc $d019
+					ldx zp_rasterpos
+					inx
+					inx
+					inx
+					stx $d001
+					stx $d003
+					stx $d005
+					stx $d007
+					stx $d009
+					ldx zp_spritelinecnt
+					inx
+					txa
+					asl
+					asl
+					asl
+					tay
+					ldx #0
+!:					lda ScrollPtr_location,y
+					sta Screen0+$3f8,x
+					iny
+					inx
+					cpx #6
+					bne !-
+
+					lda zp_rasterpos
+					clc
+					adc #25
+					sta zp_rasterpos
+
+					lda zp_spritelinecnt
+					cmp #5 ///////////////////// if I need to move vsync, this is where
+					bne !+
+					lda #1
+					sta FLAG_vsync
+!:
+					ldx zp_spritelinecnt
+					inx
+					cpx #8 // Number of rows
+					bne RepeatSprites
+					jmp ReturnFromScroller //NextIRQ,0
+
+// ---------------------------------------------------------------------
+
+Scroll:				lda FLAG_EnableScrollerIRQ
+					bne !+
+					rts
+!:					lda ypos
+					cmp #50-24
+					beq NextLine
+					dec ypos
+					rts
+NextLine:			jsr PlotNextLine
+					lda #50
+					sta ypos
+					ldx #5
+!:					lda ScrollPtr_location,x
+					sta ScrollPtr_location+72,x
+					lda ScrollPtr_location+8,x
+					sta ScrollPtr_location,x
+					lda ScrollPtr_location+16,x
+					sta ScrollPtr_location+8,x
+					lda ScrollPtr_location+24,x
+					sta ScrollPtr_location+16,x
+					lda ScrollPtr_location+32,x
+					sta ScrollPtr_location+24,x
+					lda ScrollPtr_location+40,x
+					sta ScrollPtr_location+32,x
+					lda ScrollPtr_location+48,x
+					sta ScrollPtr_location+40,x
+					lda ScrollPtr_location+56,x
+					sta ScrollPtr_location+48,x
+					lda ScrollPtr_location+64,x
+					sta ScrollPtr_location+56,x
+					lda ScrollPtr_location+72,x
+					sta ScrollPtr_location+64,x
+					dex
+					bpl !-
+					rts
+
+scrolldstlo:		.fill 9,<spr_Scroller+(i*512)
+scrolldsthi:		.fill 9,>spr_Scroller+(i*512)
+
+PlotNextLine:		ldx #0
+					lda scrolldstlo,x
+					sta chardst+1
+					sta chardstlo2+1
+
+					lda scrolldsthi,x
+					sta chardst+2
+					sta chardsthi2+1
+
+					ldx PlotNextLine+1
+					inx
+					cpx #9
+					bne !+
+					ldx #0
+!:					stx PlotNextLine+1
+
+TextPtr:			ldx Text // get char
+					cpx #0
+					beq linedone
+
+					cpx #255
+					bne !+
+:break()					
+					lda #<Text 	// reset scroller
+					sta TextPtr+1
+					lda #>Text
+					sta TextPtr+2
+					lda #0
+					sta dstindex
+					jmp TextPtr
+!:
+
+					lda CharMap,x // find in charmap
+					tax
+					lda CharSrclo,x
+					sta charsrc+1
+					lda CharSrchi,x
+					sta charsrc+2
+
+					ldy #7
+					ldx #7*3
+!:
+charsrc:			lda $1234,y
+chardst:			sta $1234,x
+					dey
+					dex
+					dex
+					dex
+					bpl !-
+
+					inc dstindex
+chardstlo2:			lda #<spr_Scroller
+					sta chardst+1
+chardsthi2:			lda #>spr_Scroller
+					sta chardst+2
+					ldx dstindex
+					lda chardst+1
+					clc
+					adc dstindexlo,x
+					sta chardst+1
+					lda chardst+2
+					adc dstindexhi,x
+					sta chardst+2
+					jsr NextChar
+					jmp TextPtr
+
+linedone:			lda #0
+					sta dstindex
+NextChar:			lda TextPtr+1
+					clc
+					adc #1
+					sta TextPtr+1
+					lda TextPtr+2
+					adc #0
+					sta TextPtr+2
+					rts
+
+dstindex:			.byte 0
+dstindexlo:			.byte 0,1,2, 64,65,66, 128,129,130, 192,193,194, 0,1,2
+dstindexhi:			.byte 0,0,0,    0,0,0,       0,0,0,       0,0,0, 1,1,1
+
+.pc = $0668 "Scroll data"
+
+					//    "123123123123123"
+Text:				.text "    credits    @"
+					.text "code       trap@"
+					.text "graphics  sarge@"
+					.text "music    jammer@"
+					.text "     +++++     @"
+					.text " a celebration @"
+					.text "of the classic @"
+					.text " trap demo by  @"
+					.text " the legendary @"
+					.text "   ratt+benn   @"
+					.text "     +++++     @"
+					.text "  released at  @"
+					.text " gubbdata 2021 @"
+					.text "     +++++     @"
+					.byte 255
+
+CharSrclo:			.fill 40,<Font+(i*8)
+CharSrchi:			.fill 40,>Font+(i*8)
+CharMap:			.byte 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,0,0,0,0,0
+					.byte 0,0,0,0,0,0,0,0,0,0,0,39,38,40,37,41,36,27,28,29,30,31,32,33,34,35
+					//      a b c d e f g h i j k l m n o p q r s t u v w x y z 1 2 3 4 5 6 7 8 9 0 . , + - /
+CharWidthMap:		.byte 0,8,8,8,8,8,8,8,8,4,8,8,8,9,8,8,8,8,8,8,8,8,8,9,8,8,8,4,8,8,8,8,8,8,8,8,8,4,4,4,4,8
+}

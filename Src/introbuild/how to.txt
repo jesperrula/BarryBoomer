@@ -1,0 +1,7 @@
+build gubbdata
+run pack1
+build intro
+run pack2
+build preintro
+run pack3
+

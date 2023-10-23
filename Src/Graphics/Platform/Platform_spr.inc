@@ -1,0 +1,9 @@
+.const Platform_sprXStart=0
+.const Platform_sprYStart=0
+.const Platform_sprWidth=4
+.const Platform_sprHeight=1
+.const Platform_sprColor=10
+.const Platform_sprMC1=4
+.const Platform_sprMC2=7
+.const Platform_sprIsMC=1
+.const Platform_sprIsXExpanded=0

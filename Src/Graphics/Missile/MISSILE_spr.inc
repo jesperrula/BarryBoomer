@@ -1,0 +1,9 @@
+.const MISSILE_sprXStart=0
+.const MISSILE_sprYStart=0
+.const MISSILE_sprWidth=5
+.const MISSILE_sprHeight=1
+.const MISSILE_sprColor=7
+.const MISSILE_sprMC1=15
+.const MISSILE_sprMC2=6
+.const MISSILE_sprIsMC=1
+.const MISSILE_sprIsXExpanded=0

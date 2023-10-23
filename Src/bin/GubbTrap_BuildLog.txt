@@ -1,0 +1,57 @@
+parsing
+flex pass 1
+flex pass 2
+Output pass
+  File creation disabled (no breakpoint file created)
+Writing prg file: G:\Repos\C64\Barry\Src\bin\GubbTrap.prg
+
+Memory Map
+----------
+Default-segment:
+  *$0002-$0010 ZP
+  $0368-$04f9 curtain
+  $0500-$0665 Font
+  $0668-$07f8 Scroll data
+  $0801-$080c Basic Upstart Program
+  $080d-$0c16 Code Main
+  $0c17-$0fea Code Starfield
+  $0feb-$1d1c Code Drummer
+  $1d1d-$1dbb Code SpritePusher
+  $1dc4-$1e97 Code GubbShip Supplement
+  $1e98-$1f21 Scroll data
+  $1f22-$1f77 Code Fadein
+  $2000-$382f Music
+  $3845-$3ffa Code GubbShip
+  $4000-$5f3f Framebuffer Bitmap 1
+  $6000-$63f7 Framebuffer Screen 1
+  $6400-$7fff Framebuffer Sprites 1
+  $8000-$83e7 Background colormap
+  $8400-$8909 Starfield data
+  $890a-$8f41 StarField mask
+  $8f42-$9a31 Drummer graphics
+  $9a32-$a0f1 Moon data
+  $a0f2-$a4f4 Code Missile
+  $a4f5-$afa9 Code SpaceShip
+  $afaa-$c0fb Code SpaceGuy
+  $c0fc-$c481 Code SmallShip
+  $c482-$c6f5 Code FlashingHead
+  $c6f6-$c867 Storyboard table
+  $c868-$ccdd Code Moon
+  $ccde-$cff2 Code Scroller
+  $d000-$d1bf Graphics FlashingHead
+  $d1c0-$d7ff Graphics GubbShip
+  $d800-$da6f Sleeping drummer
+  $da70-$db6f Graphics Small GubbShip
+  $dc00-$dfe7 screenbuffer
+  $e000-$ffe2 Code Scorch
+
+Got 0 errors and 16 warnings while executing:
+  (G:\Repos\C64\Barry\Src\GubbTrap.asm 74:12) Warning: Using absolute mode for zeropage argument. Try defining involved labels before this statement.
+  (G:\Repos\C64\Barry\Src\GubbTrap.asm 121:6) Warning: Using absolute mode for zeropage argument. Try defining involved labels before this statement.
+  (G:\Repos\C64\Barry\Src\GubbTrap.asm 124:6) Warning: Using absolute mode for zeropage argument. Try defining involved labels before this statement.
+  (G:\Repos\C64\Barry\Src\macros.asm 72:7) Warning: Using absolute mode for zeropage argument. Try defining involved labels before this statement.
+  (G:\Repos\C64\Barry\Src\macros.asm 81:18) Warning: Using absolute mode for zeropage argument. Try defining involved labels before this statement.
+  ...
+
+Writing Vice symbol file: G:\Repos\C64\Barry\Src\bin\GubbTrap.vs
+Writing Symbol file: GubbTrap.sym

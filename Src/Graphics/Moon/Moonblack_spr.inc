@@ -1,0 +1,9 @@
+.const Moonblack_sprXStart=0
+.const Moonblack_sprYStart=0
+.const Moonblack_sprWidth=1
+.const Moonblack_sprHeight=1
+.const Moonblack_sprColor=0
+.const Moonblack_sprMC1=-1
+.const Moonblack_sprMC2=-1
+.const Moonblack_sprIsMC=1
+.const Moonblack_sprIsXExpanded=0

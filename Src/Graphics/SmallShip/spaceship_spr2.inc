@@ -1,0 +1,9 @@
+.const spaceship_spr2XStart=0
+.const spaceship_spr2YStart=21
+.const spaceship_spr2Width=8
+.const spaceship_spr2Height=1
+.const spaceship_spr2Color=10
+.const spaceship_spr2MC1=9
+.const spaceship_spr2MC2=15
+.const spaceship_spr2IsMC=1
+.const spaceship_spr2IsXExpanded=0

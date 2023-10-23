@@ -1,0 +1,5 @@
+.const PlatformCutout_platformXStart=128
+.const PlatformCutout_platformYStart=184
+.const PlatformCutout_platformWidth=12
+.const PlatformCutout_platformHeight=2
+.const PlatformCutout_platformBackground=0
